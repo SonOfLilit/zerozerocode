@@ -5,92 +5,109 @@ with bash session tool support in Docker.
 """
 
 import json
-import uuid
+import os
+from pathlib import Path
 import time
+import uuid
 import subprocess
 import requests
-import re
 from typing import Dict, List, Optional, Any
+
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+ISSUE = """\
+Hey there, hope you're doing well. I've noticed a strange issue which seems to occur in certain circumstances. The library switches my Calibri font in the following spreadsheet to Arial upon loading and saving the file. I created the file in ONLYOFFICE.
+
+Here's the workbook: fonts.xlsx
+
+And the code used to round-trip:
+
+fn main() {
+    let book = umya_spreadsheet::reader::xlsx::read("fonts.xlsx").unwrap();
+    umya_spreadsheet::writer::xlsx::write(&book, "output.xlsx").unwrap();
+}
+And the output file: output.xlsx
+
+As you'll see when opening it, the font has been changed to Arial instead of being retained as Calibri.
+
+Cheers
+Fotis
+"""
+PROMPT = Path("prompt.txt").read_text().format(issue=ISSUE)
 
 
 class BashSessionManager:
     """Manages bash sessions running in Docker container."""
-    
+
     def __init__(self, container_name: str = "zerozerocode"):
         self.container_name = container_name
         self.sessions: Dict[int, Dict[str, Any]] = {}
-        
+
     def start_session(self, session_id: int) -> str:
         """Start a new bash session with given index."""
         try:
             # Generate unique prompt UUID for this session
             prompt_uuid = str(uuid.uuid4())
-            
+
             # Start bash session in Docker with custom prompt
-            cmd = [
-                "docker", "exec", "-it", self.container_name,
-                "bash", "-c", f'export PROMPT="{prompt_uuid}"; bash'
-            ]
-            
+            cmd = ["docker", "exec", "-i", self.container_name, "bash"]
+
             process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1
+                bufsize=1,
             )
-            
-            self.sessions[session_id] = {
-                "process": process,
-                "prompt_uuid": prompt_uuid
-            }
-            
-            return f"Started bash session {session_id} with prompt UUID: {prompt_uuid}"
-            
+
+            self.sessions[session_id] = {"process": process, "prompt_uuid": prompt_uuid}
+
+            return f"Started bash session {session_id}"
+
         except Exception as e:
             return f"Error starting bash session {session_id}: {str(e)}"
-    
+
     def send_command(self, session_id: int, command: str) -> str:
         """Send command to bash session and return output."""
         if session_id not in self.sessions:
             return f"Error: Bash session {session_id} not found. Start it first."
-        
+
         try:
             session = self.sessions[session_id]
             process = session["process"]
             prompt_uuid = session["prompt_uuid"]
-            
+
             # Send command followed by echo of prompt UUID to detect completion
-            full_command = f"{command}\necho 'COMMAND_DONE_{prompt_uuid}'\n"
+            full_command = f"{command};echo EXIT_CODE_{prompt_uuid}:$?\n"
             process.stdin.write(full_command)
             process.stdin.flush()
-            
+
             # Read output until we see our completion marker
             output_lines = []
             while True:
                 line = process.stdout.readline()
+                print(repr(line))
                 if not line:
-                    break
-                    
+                    time.sleep(0.1)
+                    continue
+
                 output_lines.append(line)
-                
+
                 # Check if we've reached our completion marker
-                if f"COMMAND_DONE_{prompt_uuid}" in line:
+                if line.startswith(f"EXIT_CODE_{prompt_uuid}"):
                     break
-                    
-                # Timeout safety
-                if len(output_lines) > 1000:
-                    output_lines.append("... (output truncated - too long)")
-                    break
-            
+
             # Remove the completion marker line
             output = "".join(output_lines[:-1]) if output_lines else ""
             return output.strip()
-            
+
         except Exception as e:
             return f"Error executing command in session {session_id}: {str(e)}"
-    
+
     def cleanup(self):
         """Clean up all bash sessions."""
         for session_id, session in self.sessions.items():
@@ -103,37 +120,33 @@ class BashSessionManager:
 
 class MercuryLLMClient:
     """Client for Inception Labs Mercury LLM."""
-    
+
     def __init__(self, api_url: str, api_key: Optional[str] = None):
         self.api_url = api_url
         self.api_key = api_key
         self.session = requests.Session()
         if api_key:
             self.session.headers.update({"Authorization": f"Bearer {api_key}"})
-    
-    def send_prompt(self, messages: List[Dict[str, str]], tools: Optional[List[Dict]] = None) -> Dict:
+
+    def send_prompt(
+        self, messages: List[Dict[str, str]], tools: Optional[List[Dict]] = None
+    ) -> Dict:
         """Send prompt to Mercury LLM and return response."""
         payload = {
             "messages": messages,
-            "model": "mercury",  # Adjust model name as needed
-            "temperature": 0.7,
-            "max_tokens": 2000
+            "model": "mercury-coder",  # Adjust model name as needed
+            "temperature": 0.0,
+            "max_tokens": 20000,
         }
-        
+
         if tools:
             payload["tools"] = tools
-            payload["tool_choice"] = "auto"
-        
-        try:
-            response = self.session.post(
-                f"{self.api_url}/chat/completions",
-                json=payload,
-                timeout=60
-            )
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            return {"error": f"API call failed: {str(e)}"}
+
+        response = self.session.post(
+            f"{self.api_url}/chat/completions", json=payload, timeout=60
+        )
+        response.raise_for_status()
+        return response.json()
 
 
 def define_tools() -> List[Dict]:
@@ -142,41 +155,41 @@ def define_tools() -> List[Dict]:
         {
             "type": "function",
             "function": {
-                "name": "start_bash_session",
-                "description": "Start a new bash session with the given index in the Docker container",
+                "name": "new",
+                "description": "Start a new bash session with the given index",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "session_id": {
+                        "id": {
                             "type": "integer",
-                            "description": "Index/ID for the bash session"
+                            "description": "ID for the bash session",
                         }
                     },
-                    "required": ["session_id"]
-                }
-            }
+                    "required": ["id"],
+                },
+            },
         },
         {
             "type": "function",
             "function": {
-                "name": "send_bash_command",
+                "name": "run",
                 "description": "Send a command to an existing bash session and return the output",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "session_id": {
+                        "id": {
                             "type": "integer",
-                            "description": "Index/ID of the bash session to use"
+                            "description": "bash session to use",
                         },
                         "command": {
                             "type": "string",
-                            "description": "Command to execute in the bash session"
-                        }
+                            "description": "command to execute",
+                        },
                     },
-                    "required": ["session_id", "command"]
-                }
-            }
-        }
+                    "required": ["id", "command"],
+                },
+            },
+        },
     ]
 
 
@@ -184,16 +197,16 @@ def execute_tool_call(tool_call: Dict, bash_manager: BashSessionManager) -> str:
     """Execute a tool call and return the result."""
     function_name = tool_call["function"]["name"]
     arguments = json.loads(tool_call["function"]["arguments"])
-    
-    if function_name == "start_bash_session":
-        session_id = arguments["session_id"]
-        return bash_manager.start_session(session_id)
-    
-    elif function_name == "send_bash_command":
-        session_id = arguments["session_id"]
+
+    if function_name == "new":
+        id = arguments["id"]
+        return bash_manager.start_session(id)
+
+    elif function_name == "run":
+        id = arguments["id"]
         command = arguments["command"]
-        return bash_manager.send_command(session_id, command)
-    
+        return bash_manager.send_command(id, command)
+
     else:
         return f"Unknown tool: {function_name}"
 
@@ -202,85 +215,52 @@ def main():
     """Main interaction loop."""
     # Configuration - adjust these as needed
     MERCURY_API_URL = "https://api.inceptionlabs.ai/v1"  # Adjust URL
-    MERCURY_API_KEY = None  # Add your API key if needed
-    
+    MERCURY_API_KEY = os.environ["MERCURY_API_KEY"]  # Add your API key if needed
+
     # Initialize components
     llm_client = MercuryLLMClient(MERCURY_API_URL, MERCURY_API_KEY)
     bash_manager = BashSessionManager()
     tools = define_tools()
-    
+
     # Initialize conversation
-    messages = []
-    
-    print("Mercury LLM Tool Loop - Type 'quit' to exit")
-    print("=" * 50)
-    
+    messages = [{"role": "system", "content": PROMPT}]
+
     try:
         while True:
-            # Get user input
-            user_input = input("\nUser: ").strip()
-            if user_input.lower() in ['quit', 'exit', 'q']:
-                break
-            
-            if not user_input:
-                continue
-            
-            # Add user message
-            messages.append({"role": "user", "content": user_input})
-            
-            # Main interaction loop
-            while True:
-                print("\nSending to Mercury LLM...")
-                
-                # Send to LLM
-                response = llm_client.send_prompt(messages, tools)
-                
-                if "error" in response:
-                    print(f"Error: {response['error']}")
-                    break
-                
-                # Get assistant message
-                assistant_message = response["choices"][0]["message"]
-                print(f"\nAssistant: {assistant_message.get('content', '')}")
-                
-                # Add assistant message to conversation
-                messages.append(assistant_message)
-                
-                # Check for tool calls
-                tool_calls = assistant_message.get("tool_calls", [])
-                if not tool_calls:
-                    break  # No tools to execute, wait for next user input
-                
-                # Execute tool calls
-                print("\nExecuting tools...")
-                for tool_call in tool_calls:
-                    tool_name = tool_call["function"]["name"]
-                    print(f"  Running {tool_name}...")
-                    
-                    # Execute tool
-                    result = execute_tool_call(tool_call, bash_manager)
-                    print(f"  Result: {result[:200]}{'...' if len(result) > 200 else ''}")
-                    
-                    # Add tool result to conversation
-                    messages.append({
+            print(f"\nSending to Mercury LLM...\n{json.dumps(messages, indent=2)}")
+            # Send to LLM
+            response = llm_client.send_prompt(messages, tools)
+
+            # Get assistant message
+            assistant_message = response["choices"][0]["message"]
+            print(
+                f"\nAssistant: {assistant_message.get('content', '')}{assistant_message.get('tool_calls', '')}"
+            )
+            input()
+
+            # Add assistant message to conversation
+            messages.append(assistant_message)
+
+            # Check for tool calls
+            tool_calls = assistant_message.get("tool_calls", [])
+            for tool_call in tool_calls:
+                tool_name = tool_call["function"]["name"]
+                print(f"  Running {tool_name}...\n{tool_call}")
+
+                # Execute tool
+                result = execute_tool_call(tool_call, bash_manager)
+                print(f"  Result: {result[:200]}{'...' if len(result) > 200 else ''}")
+
+                # Add tool result to conversation
+                messages.append(
+                    {
                         "role": "tool",
                         "tool_call_id": tool_call["id"],
-                        "content": result
-                    })
-                
-                # Continue loop to send tool results back to LLM
-    
-    except KeyboardInterrupt:
-        print("\nInterrupted by user")
-    
-    except Exception as e:
-        print(f"\nUnexpected error: {e}")
-    
+                        "content": result,
+                    }
+                )
     finally:
-        # Cleanup
-        print("\nCleaning up bash sessions...")
         bash_manager.cleanup()
-        print("Done!")
 
 
 if __name__ == "__main__":

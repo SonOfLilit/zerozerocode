@@ -4,7 +4,7 @@ Debug, fix and push the fix to this issue:
 
 Make sure to add tests for any issues found and to run tests before committing.
 
-Relevant context: there is a git project in the current directory.
+Relevant context: the program to fix is in a git repo in the current directory.
 
 You can run commands in a bash cli through tool use. Use this to find your way around the project, read code, experiment with solutions, etc'.
 
