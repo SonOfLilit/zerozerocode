@@ -224,10 +224,14 @@ def main():
 
     # Initialize conversation
     messages = [{"role": "system", "content": PROMPT}]
+    first_new_message = 0
 
     try:
         while True:
-            print(f"\nSending to Mercury LLM...\n{json.dumps(messages, indent=2)}")
+            print(
+                f"\nSending to Mercury LLM...\n{json.dumps(messages[first_new_message:], indent=2)}"
+            )
+            first_new_message = len(messages)
             # Send to LLM
             response = llm_client.send_prompt(messages, tools)
 

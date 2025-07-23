@@ -1,11 +1,9 @@
-Debug, fix and push the fix to this issue:
+Debug and fix this issue:
 
 {issue}
 
+Plan out loud before you start doing things. Note that you're changing your plan whenever there's a reason to.
 Make sure to add tests for any issues found and to run tests before committing.
-
-Relevant context: the program to fix is in a git repo in the current directory.
-
+The program to fix is in a git repo in the current directory.
 You can run commands in a bash cli through tool use. Use this to find your way around the project, read code, experiment with solutions, etc'.
-
 You can use `echo COMMAND | ed` for viewing and editing files from the terminal.
