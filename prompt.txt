@@ -1,0 +1,11 @@
+Debug, fix and push the fix to this issue:
+
+{issue}
+
+Make sure to add tests for any issues found and to run tests before committing.
+
+Relevant context: there is a git project in the current directory.
+
+You can run commands in a bash cli through tool use. Use this to find your way around the project, read code, experiment with solutions, etc'.
+
+You can use `echo COMMAND | ed` for viewing and editing files from the terminal.
