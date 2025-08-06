@@ -12,8 +12,10 @@ import uuid
 import subprocess
 import requests
 from typing import Dict, List, Optional, Any
-
+import dotenv
 import logging
+
+dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -52,7 +54,7 @@ class BashSessionManager:
             # Generate unique prompt UUID for this session
             prompt_uuid = str(uuid.uuid4())
 
-            # Start bash session in Docker with custom prompt
+            # Start bash session in Docker
             cmd = ["docker", "exec", "-i", self.container_name, "bash"]
 
             process = subprocess.Popen(
@@ -65,6 +67,9 @@ class BashSessionManager:
             )
 
             self.sessions[session_id] = {"process": process, "prompt_uuid": prompt_uuid}
+            test_response = self.send_command(session_id, "echo hello")
+            if test_response != "hello":
+                raise RuntimeError(f"Error starting session: {test_response}")
 
             return f"Started bash session {session_id}"
 
@@ -74,7 +79,7 @@ class BashSessionManager:
     def send_command(self, session_id: int, command: str) -> str:
         """Send command to bash session and return output."""
         if session_id not in self.sessions:
-            return f"Error: Bash session {session_id} not found. Start it first."
+            self.start_session(session_id)
 
         try:
             session = self.sessions[session_id]
@@ -136,7 +141,7 @@ class MercuryLLMClient:
             "messages": messages,
             "model": "mercury-coder",  # Adjust model name as needed
             "temperature": 0.0,
-            "max_tokens": 20000,
+            "max_tokens": 2000,
         }
 
         if tools:
@@ -155,23 +160,6 @@ def define_tools() -> List[Dict]:
         {
             "type": "function",
             "function": {
-                "name": "new",
-                "description": "Start a new bash session with the given index",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "id": {
-                            "type": "integer",
-                            "description": "ID for the bash session",
-                        }
-                    },
-                    "required": ["id"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
                 "name": "run",
                 "description": "Send a command to an existing bash session and return the output",
                 "parameters": {
@@ -179,7 +167,7 @@ def define_tools() -> List[Dict]:
                     "properties": {
                         "id": {
                             "type": "integer",
-                            "description": "bash session to use",
+                            "description": "bash session to use (if it doesn't exist, it will be created)",
                         },
                         "command": {
                             "type": "string",
@@ -198,11 +186,7 @@ def execute_tool_call(tool_call: Dict, bash_manager: BashSessionManager) -> str:
     function_name = tool_call["function"]["name"]
     arguments = json.loads(tool_call["function"]["arguments"])
 
-    if function_name == "new":
-        id = arguments["id"]
-        return bash_manager.start_session(id)
-
-    elif function_name == "run":
+    if function_name == "run":
         id = arguments["id"]
         command = arguments["command"]
         return bash_manager.send_command(id, command)
