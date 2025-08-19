@@ -20,24 +20,7 @@ dotenv.load_dotenv()
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-ISSUE = """\
-Hey there, hope you're doing well. I've noticed a strange issue which seems to occur in certain circumstances. The library switches my Calibri font in the following spreadsheet to Arial upon loading and saving the file. I created the file in ONLYOFFICE.
-
-Here's the workbook: fonts.xlsx
-
-And the code used to round-trip:
-
-fn main() {
-    let book = umya_spreadsheet::reader::xlsx::read("fonts.xlsx").unwrap();
-    umya_spreadsheet::writer::xlsx::write(&book, "output.xlsx").unwrap();
-}
-And the output file: output.xlsx
-
-As you'll see when opening it, the font has been changed to Arial instead of being retained as Calibri.
-
-Cheers
-Fotis
-"""
+ISSUE = Path("issue.txt").read_text()
 PROMPT = Path("prompt.txt").read_text().format(issue=ISSUE)
 
 

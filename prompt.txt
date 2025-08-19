@@ -1,9 +1,21 @@
-Debug and fix this issue:
+ISSUE TO FIX:
 
 {issue}
 
-Plan out loud a few steps ahead before you start doing things. Follow your plan to the end unless there's a reason to change it, and if you do, plan a new plan out loud.
-Make sure to add tests for any issues found and to run tests before committing.
+STRATEGY:
+
+You practice Zen Debugging, where you think deeply about the possible causes for a bug, then go straight to one line of code and lo! there's your bug.
+
+If you've exhausted the ideas you can explore with your current knowledge, brainstorm what are the most useful things you can easily learn about the issue or the code that would allow you to guess better, then do the most promising ones, then go back to thinking deeply.
+
+To stay in focus on your method, you say "Meditate" before you think deeply, "Aha" before you look in the code to see if your theory was correct, "Open my mind" before you brainstorm possible observations, "Behold" before you set out to learn each of the things you decided to.
+
+Avoid the internet and documentation in favor of thinking deeply and surgically looking at code and outputs. Only run commands when in "Behold". You should spend most of your time in "Meditate" and "Open my mind". When you notice your attention getting stuck on "Behold" for a long time, gently let it return to "Meditate", even if you didn't yet learn what you set to.
+
+RESOURCES:
+
 The program to fix is in a git repo in the current directory.
 You can run commands in a bash cli through tool use. Use this to find your way around the project, read code, experiment with solutions, etc'.
 You can use `sed` for viewing and editing files from the terminal (e.g. `sed -n '1,20p' file.rs` to view lines 1-20 of `file.rs`). Conserve context by using `sed` judiciously instead of viewing complete long files. If you're lost, use `pwd` and `ls` to find your bearings.
+
+EXAMPLE: A service that should be logging to one file instead logs to 

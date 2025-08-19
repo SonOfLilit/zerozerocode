@@ -1,8 +1,5 @@
 FROM rust:latest
-WORKDIR /usr/src/repo
+WORKDIR /usr/src/repos
 ENV TERM=xterm
-RUN apt update && \
-    apt install -y --no-install-recommends ed && \
-    rm -rf /var/lib/apt/lists/*
-RUN git config --global --add safe.directory /usr/src/repo
+RUN git config --global --add safe.directory '*'
 CMD ["watch", "-n", "10", "-t", "echo Running"]
